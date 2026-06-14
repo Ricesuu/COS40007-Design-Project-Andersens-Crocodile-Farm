@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campus Infrastructure AI Inspector</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0"
+    rel="stylesheet"
+  />
+
+  <link rel="stylesheet" href="/static/style.css" />
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <!-- ================================================================== -->
+  <!-- SIDEBAR                                                             -->
+  <!-- ================================================================== -->
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-hdr">
+      <button id="sidebar-toggle" class="btn-icon" title="Toggle Sidebar">
+        <span class="material-symbols-rounded">menu_open</span>
+      </button>
+    </div>
+
+    <div class="brand">
+      <span class="material-symbols-rounded brand-icon">engineering</span>
+      <span class="brand-text">Campus Infrastructure AI Inspector</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-btn active" data-panel="dashboard">
+        <span class="material-symbols-rounded">dashboard</span>
+        <span class="nav-label">Dashboard Hub</span>
+      </button>
+      <button class="nav-btn" data-panel="manifest">
+        <span class="material-symbols-rounded">description</span>
+        <span class="nav-label">Defect Manifest Log</span>
+      </button>
+      <button class="nav-btn" data-panel="analytics">
+        <span class="material-symbols-rounded">bar_chart</span>
+        <span class="nav-label">Analytics</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <span class="version-tag">v1.0.0</span>
+    </div>
+  </aside>
+
+  <!-- ================================================================== -->
+  <!-- MAIN WORKSPACE                                                      -->
+  <!-- ================================================================== -->
+  <main id="main-workspace" class="workspace">
+
+    <!-- ================================================================ -->
+    <!-- LEFT COLUMN: Parameters                                          -->
+    <!-- ================================================================ -->
+    <section class="panel params-panel">
+      <h3 class="panel-title">
+        <span class="material-symbols-rounded">tune</span> Parameters
+      </h3>
+
+      <div class="slider-group">
+        <label class="slider-label" for="conf-slider">
+          Confidence Threshold
+          <span class="slider-val mono" id="conf-val">0.25</span>
+        </label>
+        <input
+          type="range"
+          id="conf-slider"
+          class="custom-slider"
+          min="0.05"
+          max="0.95"
+          step="0.05"
+          value="0.25"
+        />
+      </div>
+
+      <div class="slider-group">
+        <label class="slider-label" for="iou-slider">
+          IoU Threshold
+          <span class="slider-val mono" id="iou-val">0.45</span>
+        </label>
+        <input
+          type="range"
+          id="iou-slider"
+          class="custom-slider"
+          min="0.05"
+          max="0.95"
+          step="0.05"
+          value="0.45"
+        />
+      </div>
+
+      <!-- Targeted Classes -->
+      <div id="class-filters" class="class-filters">
+        <span class="filter-label">Targeted Classes</span>
+        <div class="filter-pills" id="filter-pills-container">
+          <!-- dynamically populated by app.js via /api/model-info -->
+        </div>
+      </div>
+
+      <!-- SAHI Deep Scan Toggle -->
+      <div id="sahi-container" class="sahi-container">
+        <label class="sahi-toggle-label" for="sahi-checkbox">
+          <div class="sahi-toggle-switch">
+            <input type="checkbox" id="sahi-checkbox" />
+            <span class="sahi-toggle-track">
+              <span class="sahi-toggle-thumb"></span>
+            </span>
+          </div>
+          <span class="sahi-label-text">Enable SAHI Deep Scan</span>
+        </label>
+        <p id="sahi-tooltip" class="sahi-tooltip">
+          Slices high-res assets to detect micro-anomalies.
+        </p>
+        <div id="sahi-intensity-group" class="sahi-intensity-group hidden">
+          <label class="slider-label" for="sahi-slice-select">
+            Scan Intensity
+          </label>
+          <select id="sahi-slice-select" class="sahi-select">
+            <option value="1024">Fast (1024px Slices)</option>
+            <option value="704" selected>Balanced (704px Slices)</option>
+            <option value="512">Deep (512px Slices)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Run Detection button -->
+      <button id="detect-btn" class="detect-btn" disabled>
+        <span class="material-symbols-rounded">search</span>
+        DETECT
+      </button>
+
+      <!-- Latency HUD -->
+      <div class="latency-hud" id="latency-hud">
+        <span class="material-symbols-rounded">timer</span>
+        <div class="latency-info">
+          <span class="latency-label">Latency</span>
+          <span class="latency-value mono" id="latency-display">--</span>
+          <span class="latency-unit">ms / frame</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <!-- CENTER COLUMN: Staging & Output                                  -->
+    <!-- ================================================================ -->
+    <section class="panel stage-panel">
+      <!-- Class group toggle -->
+      <div class="class-group-toggle" id="class-group-toggle">
+        <button class="group-btn active" data-group="3cls">3 Class</button>
+        <button class="group-btn" data-group="6cls">6 Class</button>
+      </div>
+
+      <!-- Model Tabs — data-group controls visibility -->
+      <div class="model-tabs" id="model-tabs">
+        <button class="model-tab active" data-model="3cls-s" data-group="3cls">
+          <span class="material-symbols-rounded">network_node</span>
+          v8-S
+        </button>
+        <button class="model-tab" data-model="3cls-m" data-group="3cls">
+          <span class="material-symbols-rounded">network_node</span>
+          v8-M
+        </button>
+        <button class="model-tab" data-model="3cls-v5" data-group="3cls">
+          <span class="material-symbols-rounded">network_node</span>
+          v5-SU
+        </button>
+        <button class="model-tab" data-model="6cls-s" data-group="6cls" style="display:none">
+          <span class="material-symbols-rounded">network_node</span>
+          v8-S
+        </button>
+        <button class="model-tab" data-model="6cls-m" data-group="6cls" style="display:none">
+          <span class="material-symbols-rounded">network_node</span>
+          v8-M
+        </button>
+      </div>
+
+      <!-- Action bar (hidden until after first upload) -->
+      <div id="action-bar" class="action-bar hidden">
+        <button id="new-inspect-btn" class="action-btn action-btn-primary">
+          <span class="material-symbols-rounded">add_photo_alternate</span>
+          New
+        </button>
+        <button id="remove-image-btn" class="action-btn action-btn-danger">
+          <span class="material-symbols-rounded">delete</span>
+          Remove
+        </button>
+      </div>
+
+      <!-- Upload Zone -->
+      <div id="upload-zone" class="upload-zone">
+        <span class="material-symbols-rounded upload-icon">cloud_upload</span>
+        <p class="upload-title">Drop inspection image or video here</p>
+        <p class="upload-hint">or click to browse &middot; JPG / PNG / MP4 / MOV</p>
+        <input
+          type="file"
+          id="file-input"
+          accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/x-msvideo,video/webm"
+          multiple
+          hidden
+        />
+      </div>
+
+      <!-- Output Image / Video -->
+      <div id="output-container" class="output-container hidden">
+        <!-- Carousel navigation -->
+        <button id="prev-btn" class="carousel-arrow carousel-prev" title="Previous asset">
+          <span class="material-symbols-rounded">chevron_left</span>
+        </button>
+        <button id="next-btn" class="carousel-arrow carousel-next" title="Next asset">
+          <span class="material-symbols-rounded">chevron_right</span>
+        </button>
+        <div id="carousel-counter" class="carousel-counter mono">1 / 1</div>
+
+        <div id="image-viewport" class="image-viewport">
+          <img id="output-image" src="" alt="Annotated inspection result" draggable="false" />
+          <video id="output-video" controls autoplay muted loop
+            style="display:none; max-width:100%; max-height:100%; border-radius:8px;"></video>
+        </div>
+        <div class="zoom-hint mono" id="zoom-hint">100%</div>
+        <button id="zoom-reset-btn" class="zoom-reset-btn" title="Reset zoom">
+          <span class="material-symbols-rounded">center_focus_strong</span>
+        </button>
+      </div>
+
+      <!-- Loading Spinner -->
+      <div id="loading-spinner" class="loading-spinner hidden">
+        <div class="spinner"></div>
+        <p><span id="loading-text">Running inference&hellip;</span></p>
+      </div>
+
+      <!-- Error Toast -->
+      <div id="error-toast" class="error-toast hidden"></div>
+    </section>
+
+    <!-- ================================================================ -->
+    <!-- RIGHT COLUMN: Diagnostics                                        -->
+    <!-- ================================================================ -->
+    <section class="panel diag-panel">
+      <h3 class="panel-title">
+        <span class="material-symbols-rounded">monitoring</span> Diagnostics
+      </h3>
+
+      <!-- Triage Banner -->
+      <div id="triage-banner" class="triage-banner triage-monitor">
+        <span class="material-symbols-rounded triage-icon">check_circle</span>
+        <span class="triage-level" id="triage-level">Monitor</span>
+      </div>
+
+      <!-- Advisory text block (outside banner) -->
+      <div class="advisory-block" id="advisory-block">
+        <p class="triage-advice" id="triage-advice">
+          Awaiting inspection data. Upload an image to begin analysis.
+        </p>
+      </div>
+
+      <!-- Quick stats -->
+      <div class="stat-cards">
+        <div class="stat-card">
+          <span class="stat-value mono" id="stat-defects">0</span>
+          <span class="stat-label">Defects Found</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value mono" id="stat-ratio">0.00%</span>
+          <span class="stat-label">Defect Ratio</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value mono" id="stat-avg-conf">--</span>
+          <span class="stat-label">Avg Confidence</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value mono" id="stat-top-class">--</span>
+          <span class="stat-label">Top Defect Class</span>
+        </div>
+        <div class="stat-card stat-card-wide">
+          <span class="stat-value mono" id="stat-max-area">--</span>
+          <span class="stat-label">Largest Defect (px²)</span>
+        </div>
+        <div class="stat-card stat-card-wide">
+          <span class="stat-value mono" id="stat-session-total">0</span>
+          <span class="stat-label">Session Total Defects</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================================================================== -->
+  <!-- HISTORY PANEL (hidden by default)                                     -->
+  <!-- ==================================================================== -->
+  <section id="manifest-panel" class="manifest-panel hidden">
+    <div class="manifest-hdr">
+      <h3 class="panel-title">
+        <span class="material-symbols-rounded">description</span>
+        Defect Manifest Log
+      </h3>
+      <div class="manifest-actions">
+        <!-- Class filter dropdown -->
+        <select id="manifest-class-filter" class="manifest-filter-select">
+          <option value="all">All Classes</option>
+        </select>
+        <!-- CSV Export -->
+        <button id="export-csv-btn" class="btn-icon-labeled" title="Export as CSV">
+          <span class="material-symbols-rounded">download</span>
+          <span>Export CSV</span>
+        </button>
+        <button id="clear-history-btn" class="btn-icon" title="Clear all history">
+          <span class="material-symbols-rounded">delete_sweep</span>
+        </button>
+        <button id="manifest-close" class="btn-icon" title="Close">
+          <span class="material-symbols-rounded">close</span>
+        </button>
+      </div>
+    </div>
+    <div class="table-wrapper">
+      <table id="defect-table">
+        <thead>
+          <tr>
+            <th class="sortable" data-col="inspection_run">Run # <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-col="id"># <span class="sort-icon">↕</span></th>
+            <th>Class</th>
+            <th class="sortable" data-col="confidence">Confidence <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-col="area_px">Area (px²) <span class="sort-icon">↕</span></th>
+            <th>Bounding Box</th>
+          </tr>
+        </thead>
+        <tbody id="defect-tbody">
+          <tr class="empty-row">
+            <td colspan="6">No defects logged. Run an inspection to populate.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- Summary footer -->
+    <div class="manifest-footer" id="manifest-footer"></div>
+  </section>
+
+  <!-- ================================================================== -->
+  <!-- ANALYTICS PANEL                                                     -->
+  <!-- ================================================================== -->
+  <section id="analytics-panel" class="analytics-panel hidden">
+    <div class="manifest-hdr">
+      <h3 class="panel-title">
+        <span class="material-symbols-rounded">bar_chart</span>
+        Analytics Dashboard
+      </h3>
+      <div class="manifest-actions">
+        <button id="clear-analytics-btn" class="btn-icon-labeled btn-danger-labeled" title="Clear all stored data">
+          <span class="material-symbols-rounded">delete_forever</span>
+          <span>Clear All Data</span>
+        </button>
+        <button id="analytics-close" class="btn-icon" title="Close">
+          <span class="material-symbols-rounded">close</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Session summary strip -->
+    <div class="analytics-summary-strip" id="analytics-summary-strip">
+      <div class="summary-chip">
+        <span class="material-symbols-rounded">task_alt</span>
+        <div>
+          <span class="chip-val" id="achip-runs">0</span>
+          <span class="chip-lbl">Inspections</span>
+        </div>
+      </div>
+      <div class="summary-chip">
+        <span class="material-symbols-rounded">crisis_alert</span>
+        <div>
+          <span class="chip-val" id="achip-defects">0</span>
+          <span class="chip-lbl">Total Defects</span>
+        </div>
+      </div>
+      <div class="summary-chip">
+        <span class="material-symbols-rounded">avg_pace</span>
+        <div>
+          <span class="chip-val" id="achip-avg-conf">--</span>
+          <span class="chip-lbl">Avg Confidence</span>
+        </div>
+      </div>
+      <div class="summary-chip">
+        <span class="material-symbols-rounded">timer</span>
+        <div>
+          <span class="chip-val" id="achip-avg-lat">--</span>
+          <span class="chip-lbl">Avg Latency (ms)</span>
+        </div>
+      </div>
+      <div class="summary-chip summary-chip-critical" id="achip-critical-wrap">
+        <span class="material-symbols-rounded">error</span>
+        <div>
+          <span class="chip-val" id="achip-critical">0</span>
+          <span class="chip-lbl">Critical Runs</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts grid -->
+    <div class="charts-grid">
+      <!-- Row 1 -->
+      <div class="chart-card">
+        <div class="chart-card-hdr">
+          <span class="material-symbols-rounded">donut_large</span>
+          Defect Class Distribution
+        </div>
+        <div class="chart-body chart-body-sm">
+          <canvas id="chart-class-dist"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-card-hdr">
+          <span class="material-symbols-rounded">bar_chart_4_bars</span>
+          Confidence Distribution
+        </div>
+        <div class="chart-body chart-body-sm">
+          <canvas id="chart-conf-hist"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-card-hdr">
+          <span class="material-symbols-rounded">history_edu</span>
+          Triage Level History
+        </div>
+        <div class="chart-body chart-body-sm">
+          <canvas id="chart-triage-hist"></canvas>
+        </div>
+      </div>
+
+      <!-- Row 2 -->
+      <div class="chart-card chart-card-wide">
+        <div class="chart-card-hdr">
+          <span class="material-symbols-rounded">trending_up</span>
+          Defect Count &amp; Ratio per Run
+        </div>
+        <div class="chart-body">
+          <canvas id="chart-per-run"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card chart-card-wide">
+        <div class="chart-card-hdr">
+          <span class="material-symbols-rounded">speed</span>
+          Avg Latency per Model
+        </div>
+        <div class="chart-body">
+          <canvas id="chart-latency-model"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
